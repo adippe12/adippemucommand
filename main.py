@@ -5,20 +5,19 @@ from flask import Flask
 from pypdf import PdfReader
 import google.generativeai as genai
 
+app = Flask(__name__)
 
-app = FastAPI()
-
-# Configure Gemini
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
 
+# ... keep your /adippe route here ...
 @app.get("/adippe")
 async def get_adippe_art():
     prompt = (
         "Generate a very tiny, funny ASCII art or 'LaTeX-style' text art "
         "using mathematical symbols. The main word is 'adippe'. "
         "It must be ONE LINE only and under 200 characters so it fits in a Twitch chat. "
-        "Make it look like a funny creature or a fancy math formula. Use colors. dont use strange Unicode character"
+        "Make it funny or fancy math formula. Use colors. dont use strange Unicode character"
         "Return ONLY the art string, no explanation."
     )
     
@@ -29,7 +28,6 @@ async def get_adippe_art():
         return PlainTextResponse(art)
     except Exception as e:
         return PlainTextResponse(f"Error: Could not find adippe's art right now.")
-
 
 
 @app.route('/theorem')
@@ -66,7 +64,3 @@ def get_theorem():
     except Exception as e:
         print(f"Error: {e}")
         return "The math was too hard for the bot to read today. (Error processing PDF)"
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))

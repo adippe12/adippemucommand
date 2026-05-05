@@ -1,4 +1,4 @@
-fastapi
-uvicorn
+flask
 google-generativeai
+requests
 pypdf
