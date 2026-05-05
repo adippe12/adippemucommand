@@ -125,39 +125,45 @@ def generate_tikz():
 
     except Exception as e:
         return f"TikZ Error: {e}"
-
 @app.route('/diagram')
 def generate_diagram():
-    engine = request.args.get('engine', 'd2').lower()
-    full_query = request.args.get('code', '')
+    # 1. Get the full query (e.g., "d2 A -> B")
+    query = request.args.get('q', '').strip()
     
-    # Remove engine name from the start of the code
-    code = full_query.replace(engine, '', 1).strip()
-    
-    if not code:
-        return "Usage: !diagram [engine] [code]"
-
-    # List of engines from your table that ONLY support SVG
-    svg_only = ['d2', 'excalidraw', 'nomnoml', 'pikchr', 'svgbob', 'symbolator', 'wavedrom', 'dbml']
-    fmt = 'svg' if engine in svg_only else 'png'
+    if not query:
+        return "Usage: !diagram [engine] [code]. Example: !diagram d2 A -> B"
 
     try:
-        compressed = zlib.compress(code.encode('utf-8'), 9)
+        # 2. Split: First word is the engine, the rest is the code
+        parts = query.split(None, 1)
+        if len(parts) < 2:
+            return "Error: Please provide both an engine and code. Example: !diagram mermaid graph TD; A-->B"
+        
+        engine = parts[0].lower()
+        diagram_code = parts[1]
+
+        # 3. Determine Format (SVG vs PNG) based on your table
+        svg_only = ['d2', 'excalidraw', 'nomnoml', 'pikchr', 'svgbob', 'symbolator', 'wavedrom', 'dbml', 'bpmn', 'bytefield']
+        fmt = 'svg' if engine in svg_only else 'png'
+
+        # 4. Kroki Encoding (zlib + base64)
+        compressed = zlib.compress(diagram_code.encode('utf-8'), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
         
-        # Use the correct format (png or svg) in the URL
         kroki_url = f"https://kroki.io/{engine}/{fmt}/{encoded}"
         
+        # 5. Shorten URL for the proxy
         tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={kroki_url}", timeout=5)
         
         if tiny_req.status_code == 200:
             short_id = tiny_req.text.replace("https://tinyurl.com/", "")
-            # The browser <img> tag works for both .png and .svg!
+            # Return the image tag for your overlay
             return f'$<img src="{request.host_url}render/{short_id}">$'
             
         return "Error shortening URL."
+
     except Exception as e:
-        return f"Diagram Error: {e}"
+        return f"Diagram Error: {str(e)}"
 
 # ==========================================
 # SECURE IMAGE PROXY
