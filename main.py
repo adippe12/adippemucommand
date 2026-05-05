@@ -127,13 +127,15 @@ def generate_tikz():
         return f"TikZ Error: {e}"
         
 
+
 @app.route('/diagram')
 def generate_diagram():
     query = request.args.get('q', '').strip()
     if not query:
-        return "Usage: !diagram [engine] [code]"
+        return "TUsage: !diagram [engine] [code]"
 
     try:
+        # 1. Split Engine and Code
         parts = query.split(None, 1)
         if len(parts) < 2:
             return "Error: Provide engine and code (e.g., !diagram d2 A -> B)"
@@ -141,7 +143,7 @@ def generate_diagram():
         engine = parts[0].lower()
         diagram_code = parts[1]
 
-        # TikZ Wrapper
+        # 2. TikZ Auto-Wrapper
         if engine == 'tikz' and r'\documentclass' not in diagram_code:
             diagram_code = rf"""\documentclass[tikz,border=2pt]{{standalone}}
 \usepackage{{pgfplots}}
@@ -151,39 +153,49 @@ def generate_diagram():
 {diagram_code}
 \end{{document}}"""
 
-        # Format Logic
-        svg_only = ['d2', 'excalidraw', 'nomnoml', 'pikchr', 'svgbob', 'symbolator', 'wavedrom', 'dbml', 'bpmn', 'bytefield']
-        fmt = 'svg' if engine in svg_only else 'png'
-
-        # Encoding
+        # 4. Encoding for Kroki
         compressed = zlib.compress(diagram_code.encode('utf-8'), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
-        kroki_url = f"https://kroki.io/{engine}/{fmt}/{encoded}"
+        kroki_url = f"https://kroki.io/{engine}/svg/{encoded}"
         
-        # --- NEW: VALIDATION STEP ---
-        # We check if Kroki is happy BEFORE we give the URL to the user
+        # 5. --- SMART ERROR CAPURE ---
         check = requests.get(kroki_url, timeout=8)
         
         if check.status_code != 200:
-            # If Kroki fails, it sends HTML. We look for the error message inside it.
-            # We'll use a simple regex to find the error text in the <strong> tag
-            error_match = re.search(r'<strong id="error"><code>.*?<\/code>(.*?)<\/strong>', check.text)
-            if error_match:
-                clean_error = error_match.group(1).strip()
-                return f"❌ {engine.upper()} Error: {clean_error}"
-            return f"❌ {engine.upper()} Error: Syntax is incorrect or format {fmt} is unsupported."
-        # -----------------------------
+            content = check.text
+            error_msg = ""
 
-        # If we got here, the diagram is valid! Now shorten it.
+            if "<html" in content.lower():
+                # Step A: Try to find the summary error (the "strong" tag)
+                summary_match = re.search(r'<strong id="error">(?:<code>.*?</code>)?\s*(.*?)\s*</strong>', content, re.DOTALL)
+                
+                # Step B: Try to find detailed logs (often in <pre> tags for TikZ/LaTeX)
+                detail_match = re.search(r'<pre>(.*?)</pre>', content, re.DOTALL)
+
+                if summary_match:
+                    error_msg = re.sub(r'<.*?>', '', summary_match.group(1)) # Remove any inner tags
+                
+                if detail_match and engine == 'tikz':
+                    # For TikZ, the detail is usually more helpful than the summary
+                    error_msg = detail_match.group(1).split('!', 1)[-1] # Grab the part after the LaTeX '!'
+
+            else:
+                # If it's not HTML, Kroki sent plain text error
+                error_msg = content
+
+            # Clean up and truncate for Twitch (max 400 chars)
+            clean_msg = " ".join(error_msg.split()) # Remove newlines/extra spaces
+            return f"❌ {engine.upper()} Error: {clean_msg[:350]}..."
+
+        # 6. Success: Shorten and Return
         tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={kroki_url}", timeout=5)
         if tiny_req.status_code == 200:
             short_id = tiny_req.text.replace("https://tinyurl.com/", "")
             return f'$<img src="{request.host_url}render/{short_id}">$'
             
-        return "Error: TinyURL shortening failed."
+        return "Error: TinyURL failed."
 
     except Exception as e:
-        print(f"Server crash prevented: {e}")
         return f"⚠️ System Error: {str(e)}"
 
 # ==========================================
