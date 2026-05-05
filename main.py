@@ -1,7 +1,10 @@
 import os
+import requests
+import io
+from flask import Flask
+from pypdf import PdfReader
 import google.generativeai as genai
-from fastapi import FastAPI
-from fastapi.responses import PlainTextResponse
+
 
 app = FastAPI()
 
@@ -26,6 +29,43 @@ async def get_adippe_art():
         return PlainTextResponse(art)
     except Exception as e:
         return PlainTextResponse(f"Error: Could not find adippe's art right now.")
+
+
+
+@app.route('/theorem')
+def get_theorem():
+    try:
+        # 1. Get the PDF (Handle Redirect)
+        url = "http://www.theoremoftheday.org/todays.php"
+        response = requests.get(url, allow_redirects=True, timeout=5)
+        
+        if response.status_code != 200:
+            return "Could not reach the theorem site."
+
+        # 2. Extract Text from PDF
+        pdf_file = io.BytesIO(response.content)
+        reader = PdfReader(pdf_file)
+        
+        # Get text from the first page (usually contains the main theorem info)
+        text_content = ""
+        for i in range(min(2, len(reader.pages))): # Read first 2 pages max
+            text_content += reader.pages[i].extract_text()
+
+        # 3. Ask Gemini to summarize
+        prompt = (
+            f"Here is a mathematical theorem text: {text_content[:3000]}. "
+            "Give me a 1-sentence, extremely brief summary for a Twitch chat. "
+            "Explain it like I'm 5 years old. Maximum 200 characters."
+        )
+        
+        summary_response = model.generate_content(prompt)
+        summary = summary_response.text.replace('\n', ' ').strip()
+        
+        return f"Today's Theorem: {summary}"
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return "The math was too hard for the bot to read today. (Error processing PDF)"
 
 if __name__ == "__main__":
     import uvicorn
