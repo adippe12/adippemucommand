@@ -126,6 +126,37 @@ def generate_tikz():
     except Exception as e:
         return f"TikZ Error: {e}"
 
+
+@app.route('/diagram')
+def generate_diagram():
+    # Expected usage: /diagram?engine=d2&code=direction:right;A->B
+    engine = request.args.get('engine', 'd2').lower()
+    code = request.args.get('code')
+    
+    if not code:
+        return "Usage: !diagram [engine] [code]. Example: !diagram d2 direction: right; A -> B"
+
+    try:
+        # 1. Compress and Encode the diagram code for Kroki
+        compressed = zlib.compress(code.encode('utf-8'), 9)
+        encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
+        
+        # 2. Construct the Kroki URL (requesting PNG)
+        kroki_url = f"https://kroki.io/{engine}/png/{encoded}"
+        
+        # 3. Shorten the URL via TinyURL to keep Twitch chat clean
+        tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={kroki_url}", timeout=5)
+        
+        if tiny_req.status_code == 200:
+            short_id = tiny_req.text.replace("https://tinyurl.com/", "")
+            # Return as an image tag (matching your previous style)
+            return f'$<img src="{request.host_url}render/{short_id}">$'
+            
+        return "Error shortening diagram URL."
+
+    except Exception as e:
+        return f"Diagram Error: {str(e)}"
+
 # ==========================================
 # SECURE IMAGE PROXY
 # ==========================================
@@ -137,7 +168,7 @@ def render_image(short_id):
         
         # 2. THE SECURITY CHECK: 
         # Only allow the request if it actually ends up at Kroki's TikZ renderer
-        if not img_response.url.startswith("https://kroki.io/tikz/png/"):
+        if not img_response.url.startswith("https://kroki.io/"):
             return "Unauthorized: Only TikZ diagrams from Kroki are allowed.", 403
         
         # 3. Return the image data
