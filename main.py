@@ -15,7 +15,7 @@ async def get_adippe_art():
         "Generate a very tiny, funny ASCII art or 'LaTeX-style' text art "
         "using mathematical symbols. The main word is 'adippe'. "
         "It must be ONE LINE only and under 200 characters so it fits in a Twitch chat. "
-        "Make it look like a funny creature or a fancy math formula. Use colors"
+        "Make it look like a funny creature or a fancy math formula. Use colors. dont use strange Unicode character"
         "Return ONLY the art string, no explanation."
     )
     
