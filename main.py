@@ -90,6 +90,16 @@ def generate_tikz():
             return "Error: No TikZ code generated."
             
         tikz_code = match.group(0)
+        square_fix = r"""
+        % --- Automatically inserted to force a square image ---
+        \path let \p1=(current bounding box.north east), 
+                    \p2=(current bounding box.south west),
+                    \n1={max(\x1-\x2,\y1-\y2)} in
+                (current bounding box.center) node[minimum size=\n1, inner sep=0pt, draw=none] {};
+        \end{tikzpicture}"""
+
+        # Replace the closing tag with our fix + the closing tag
+        tikz_code = tikz_code.replace(r'\end{tikzpicture}', square_fix)
 
         # Your specific LaTeX structure
         latex_template = r"""\documentclass{article}
