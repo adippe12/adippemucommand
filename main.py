@@ -103,7 +103,7 @@ def generate_tikz():
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
         
         # 1. Generate the Kroki URL
-        kroki_url = f"https://kroki.io/tikz/jpg/{encoded}"
+        kroki_url = f"https://kroki.io/tikz/png/{encoded}"
         
         # 2. Shorten it to bypass Twitch limits
         tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={kroki_url}", timeout=5)
