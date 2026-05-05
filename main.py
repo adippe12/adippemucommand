@@ -52,7 +52,7 @@ def get_theorem():
         prompt = (
             f"Here is a mathematical theorem text: {text_content[:3000]}. "
             "Give me a 1-sentence, extremely brief summary for a Twitch chat. "
-            "Explain it like I'm 5 years old. Maximum 200 characters."
+            "Explain it Maximum 200 characters."
         )
         
         summary_response = model.generate_content(prompt)
