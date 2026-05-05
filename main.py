@@ -10,14 +10,13 @@ app = Flask(__name__)
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
 
-# ... keep your /adippe route here ...
-@app.get("/adippe")
-async def get_adippe_art():
+@app.route("/adippe")
+def get_adippe_art():
     prompt = (
         "Generate a very tiny, funny ASCII art or 'LaTeX-style' text art "
         "using mathematical symbols. The main word is 'adippe'. "
         "It must be ONE LINE only and under 200 characters so it fits in a Twitch chat. "
-        "Make it funny or fancy math formula. Use colors. dont use strange Unicode character"
+        "Make it funny or fancy math formula. Use colors. dont use strange Unicode character. "
         "Return ONLY the art string, no explanation."
     )
     
@@ -25,10 +24,10 @@ async def get_adippe_art():
         response = model.generate_content(prompt)
         # Clean the response to ensure it's one line
         art = response.text.replace('\n', ' ').strip()
-        return PlainTextResponse(art)
+        return art
     except Exception as e:
-        return PlainTextResponse(f"Error: Could not find adippe's art right now.")
-
+        print(f"Error: {e}")
+        return "Error: Could not find adippe's art right now."
 
 @app.route('/theorem')
 def get_theorem():
