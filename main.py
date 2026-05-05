@@ -4,6 +4,8 @@ import io
 from flask import Flask
 from pypdf import PdfReader
 import google.generativeai as genai
+import zlib
+import base64
 
 app = Flask(__name__)
 
@@ -63,3 +65,46 @@ def get_theorem():
     except Exception as e:
         print(f"Error: {e}")
         return "The math was too hard for the bot to read today. (Error processing PDF)"
+
+
+
+@app.route('/tikz')
+def generate_tikz():
+    query = request.args.get('q')
+    if not query:
+        return "Tell me what to draw! Example: !tikz a red circle with a blue square"
+    
+    # 1. Prompt Gemini to act as a TikZ compiler
+    prompt = (
+        f"Write TikZ code to draw the following: {query}. "
+        "Return ONLY the raw code starting with \\begin{tikzpicture} and ending with \\end{tikzpicture}. "
+        "Do not include \\documentclass or any preamble. Do not use Markdown blocks like ```latex. "
+        "Just the raw code. Keep it relatively simple so it renders fast."
+    )
+    
+    try:
+        # 2. Get code from Gemini
+        response = model.generate_content(prompt)
+        tikz_code = response.text.strip()
+        
+        # Failsafe: Remove markdown blocks if Gemini stubbornly includes them
+        if tikz_code.startswith("```"):
+            lines = tikz_code.split('\n')
+            if lines[0].startswith("```"): lines = lines[1:]
+            if lines[-1].startswith("```"): lines = lines[:-1]
+            tikz_code = '\n'.join(lines).strip()
+
+        # 3. Compress and Encode the TikZ code for Kroki.io
+        # Kroki requires URL-safe Base64 of zlib compressed text
+        compressed = zlib.compress(tikz_code.encode('utf-8'), 9)
+        encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
+        
+        # 4. Create the final Kroki PNG URL
+        img_url = f"https://kroki.io/tikz/png/{encoded}"
+        
+        # 5. Return exactly the format your chat extension expects
+        return f'$<img src="{img_url}">$'
+
+    except Exception as e:
+        print(f"TikZ Error: {e}")
+        return "Error: My LaTeX compiler broke!"
