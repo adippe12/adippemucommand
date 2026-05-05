@@ -111,8 +111,7 @@ def generate_tikz():
         if tiny_req.status_code == 200:
             short_id = tiny_req.text.replace("https://tinyurl.com/", "")
             
-            # ---> IF YOU NEED IT TO BE A SQUARE FOR TWITCH, DO IT IN HTML/CSS HERE: <---
-            return f'$<img src="{request.host_url}render/{short_id}" style="object-fit: contain; width: 100px; height: 100px;">$'
+            return f'$<img src="{request.host_url}render/{short_id}">$'
             
         return "Error shortening URL."
 
