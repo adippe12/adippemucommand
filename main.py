@@ -1,7 +1,7 @@
 import os
 import requests
 import io
-from flask import Flask, request
+from flask import Flask, request, Response
 from pypdf import PdfReader
 import google.generativeai as genai
 import zlib
@@ -77,7 +77,6 @@ def generate_tikz():
     if not query:
         return "Tell me what to draw! Example: !tikz a red circle with a blue square"
     
-    # 1. Ask Gemini for JUST the picture block
     prompt = (
         f"Write TikZ code to draw: {query}. "
         "Return ONLY the raw code starting with \\begin{tikzpicture} and ending with \\end{tikzpicture}. "
@@ -90,15 +89,12 @@ def generate_tikz():
         response = model.generate_content(prompt)
         raw_text = response.text
         
-        # 2. Extract ONLY the tikzpicture block (ignores Gemini's conversational text)
         match = re.search(r'\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}', raw_text, re.DOTALL)
-        
         if not match:
             return "Error: The AI forgot how to draw (No tikzpicture found)."
             
         tikz_code = match.group(0)
 
-        # 3. Use the exact LaTeX structure the site wants!
         latex_template = r"""\documentclass{article}
 \usepackage{tikz}
 \usepackage{tikz-3dplot}
@@ -110,18 +106,53 @@ def generate_tikz():
 %s
 \end{document}
 """
-        # Insert Gemini's drawing into your template
         full_latex_document = latex_template % tikz_code
 
-        # 4. Compress and Encode the FULL document
+        # Compress for Kroki
         compressed = zlib.compress(full_latex_document.encode('utf-8'), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
+        long_img_url = f"https://kroki.io/tikz/png/{encoded}"
         
-        # 5. Create the URL
-        img_url = f"https://kroki.io/tikz/png/{encoded}"
+        # 1. Secretly shorten the URL to bypass Twitch Character Limits
+        tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={long_img_url}", timeout=5)
         
-        return f'$<img src="{img_url}">$'
+        if tiny_req.status_code == 200:
+            short_url = tiny_req.text
+            # Extract just the ID (e.g., 'y3abcde')
+            short_id = short_url.replace("https://tinyurl.com/", "")
+            
+            # 2. Build YOUR whitelisted URL using your Vercel domain
+            # request.host_url automatically grabs 'https://adippemucommand.vercel.app/'
+            whitelisted_url = f"{request.host_url}render/{short_id}"
+            
+            return f'$<img src="{whitelisted_url}">$'
+        else:
+            return "Error: Could not process image URL."
 
     except Exception as e:
         print(f"TikZ Error: {e}")
         return "Error: My LaTeX compiler broke!"
+
+
+# ==========================================
+# NEW ROUTE: The Image Proxy / Renderer
+# ==========================================
+@app.route('/render/<short_id>')
+def render_image(short_id):
+    try:
+        # Reconstruct the TinyURL
+        tiny_url = f"https://tinyurl.com/{short_id}"
+        
+        # Fetch the actual image data. 
+        # requests will automatically follow the TinyURL redirect to Kroki!
+        img_response = requests.get(tiny_url, timeout=10)
+        
+        if img_response.status_code == 200:
+            # Return the RAW image bytes directly to your chat extension
+            return Response(img_response.content, mimetype='image/png')
+        else:
+            return "Image generation failed.", 404
+            
+    except Exception as e:
+        print(f"Render Error: {e}")
+        return "Could not load image.", 500
