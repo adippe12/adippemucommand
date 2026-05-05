@@ -88,7 +88,7 @@ def generate_tikz():
         if not match:
             return "Error: No TikZ code generated."
             
-        tikz_code = match.group(0)-
+        tikz_code = match.group(0)
 
         # Your specific LaTeX structure (preview will handle the tight cropping naturally)
         latex_template = r"""\documentclass{standalone}
