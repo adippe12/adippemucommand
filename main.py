@@ -70,7 +70,7 @@ def get_theorem():
 
 @app.route('/tikz')
 def generate_tikz():
-    query = request.args.get('q')
+    query = requests.args.get('q')
     if not query:
         return "Tell me what to draw! Example: !tikz a red circle with a blue square"
     
