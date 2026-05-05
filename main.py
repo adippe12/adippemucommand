@@ -125,43 +125,49 @@ def generate_tikz():
 
     except Exception as e:
         return f"TikZ Error: {e}"
+        
+
 @app.route('/diagram')
 def generate_diagram():
-    # 1. Get the full query (e.g., "d2 A -> B")
     query = request.args.get('q', '').strip()
-    
     if not query:
-        return "Usage: !diagram [engine] [code]. Example: !diagram d2 A -> B"
+        return "Usage: !diagram [engine] [code]"
 
     try:
-        # 2. Split: First word is the engine, the rest is the code
         parts = query.split(None, 1)
         if len(parts) < 2:
-            return "Error: Please provide both an engine and code. Example: !diagram mermaid graph TD; A-->B"
+            return "Error: Provide engine and code."
         
         engine = parts[0].lower()
         diagram_code = parts[1]
 
-        # 3. Determine Format (SVG vs PNG) based on your table
+        # --- NEW: AUTO-WRAPPER FOR TIKZ ---
+        if engine == 'tikz':
+            # Only wrap if the user hasn't provided a document header already
+            if r'\documentclass' not in diagram_code:
+                diagram_code = rf"""\documentclass[tikz,border=2pt]{{standalone}}
+\usepackage{{pgfplots}}
+\pgfplotsset{{compat=1.18}}
+\usetikzlibrary{{math,shapes,arrows.meta,positioning,calc}}
+\begin{{document}}
+{diagram_code}
+\end{{document}}"""
+        # ----------------------------------
+
         svg_only = ['d2', 'excalidraw', 'nomnoml', 'pikchr', 'svgbob', 'symbolator', 'wavedrom', 'dbml', 'bpmn', 'bytefield']
         fmt = 'svg' if engine in svg_only else 'png'
 
-        # 4. Kroki Encoding (zlib + base64)
         compressed = zlib.compress(diagram_code.encode('utf-8'), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
         
         kroki_url = f"https://kroki.io/{engine}/{fmt}/{encoded}"
         
-        # 5. Shorten URL for the proxy
         tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={kroki_url}", timeout=5)
-        
         if tiny_req.status_code == 200:
             short_id = tiny_req.text.replace("https://tinyurl.com/", "")
-            # Return the image tag for your overlay
             return f'$<img src="{request.host_url}render/{short_id}">$'
             
         return "Error shortening URL."
-
     except Exception as e:
         return f"Diagram Error: {str(e)}"
 
