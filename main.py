@@ -78,8 +78,8 @@ def generate_tikz():
     prompt = (
         f"Write TikZ code to draw the following: {query}. "
         "Return ONLY the raw code starting with \\begin{tikzpicture} and ending with \\end{tikzpicture}. "
-        "Do not include \\documentclass or any preamble. Do not use Markdown blocks like ```latex. "
-        "Just the raw code. Keep it relatively simple so it renders fast."
+        "ABSOLUTELY NO \\usepackage, NO \\documentclass, NO explanations, and NO markdown. "
+        "Just the picture block."
     )
     
     try:
