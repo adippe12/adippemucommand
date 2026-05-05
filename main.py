@@ -126,36 +126,33 @@ def generate_tikz():
     except Exception as e:
         return f"TikZ Error: {e}"
 
-
 @app.route('/diagram')
 def generate_diagram():
-    # Expected usage: /diagram?engine=d2&code=direction:right;A->B
     engine = request.args.get('engine', 'd2').lower()
-    code = request.args.get('code')
+    full_query = request.args.get('code', '')
+    
+    # This removes the 'engine' name from the start of the code string
+    # Example: if query is "d2 A -> B", this makes code "A -> B"
+    code = full_query.replace(engine, '', 1).strip()
     
     if not code:
         return "Usage: !diagram [engine] [code]. Example: !diagram d2 direction: right; A -> B"
 
     try:
-        # 1. Compress and Encode the diagram code for Kroki
         compressed = zlib.compress(code.encode('utf-8'), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
         
-        # 2. Construct the Kroki URL (requesting PNG)
         kroki_url = f"https://kroki.io/{engine}/png/{encoded}"
         
-        # 3. Shorten the URL via TinyURL to keep Twitch chat clean
         tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={kroki_url}", timeout=5)
         
         if tiny_req.status_code == 200:
             short_id = tiny_req.text.replace("https://tinyurl.com/", "")
-            # Return as an image tag (matching your previous style)
             return f'$<img src="{request.host_url}render/{short_id}">$'
             
-        return "Error shortening diagram URL."
-
+        return "Error shortening URL."
     except Exception as e:
-        return f"Diagram Error: {str(e)}"
+        return f"Diagram Error: {e}"
 
 # ==========================================
 # SECURE IMAGE PROXY
