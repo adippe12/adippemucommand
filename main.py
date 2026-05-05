@@ -91,13 +91,9 @@ def generate_tikz():
         tikz_code = match.group(0)
 
         # Your specific LaTeX structure (preview will handle the tight cropping naturally)
-        latex_template = r"""\documentclass{standalone}
-\usepackage{tikz}
+        latex_template = r"""\documentclass[tikz,border=2pt]{standalone}
 \usepackage{tikz-3dplot}
 \usetikzlibrary{math,shapes,arrows.meta,positioning,calc}
-\usepackage[active,tightpage]{preview}
-\PreviewEnvironment{tikzpicture}
-\setlength\PreviewBorder{0.125pt}
 \begin{document}
 %s
 \end{document}
