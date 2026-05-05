@@ -131,23 +131,28 @@ def generate_diagram():
     engine = request.args.get('engine', 'd2').lower()
     full_query = request.args.get('code', '')
     
-    # This removes the 'engine' name from the start of the code string
-    # Example: if query is "d2 A -> B", this makes code "A -> B"
+    # Remove engine name from the start of the code
     code = full_query.replace(engine, '', 1).strip()
     
     if not code:
-        return "Usage: !diagram [engine] [code]. Example: !diagram d2 direction: right; A -> B"
+        return "Usage: !diagram [engine] [code]"
+
+    # List of engines from your table that ONLY support SVG
+    svg_only = ['d2', 'excalidraw', 'nomnoml', 'pikchr', 'svgbob', 'symbolator', 'wavedrom', 'dbml']
+    fmt = 'svg' if engine in svg_only else 'png'
 
     try:
         compressed = zlib.compress(code.encode('utf-8'), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
         
-        kroki_url = f"https://kroki.io/{engine}/png/{encoded}"
+        # Use the correct format (png or svg) in the URL
+        kroki_url = f"https://kroki.io/{engine}/{fmt}/{encoded}"
         
         tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={kroki_url}", timeout=5)
         
         if tiny_req.status_code == 200:
             short_id = tiny_req.text.replace("https://tinyurl.com/", "")
+            # The browser <img> tag works for both .png and .svg!
             return f'$<img src="{request.host_url}render/{short_id}">$'
             
         return "Error shortening URL."
@@ -170,8 +175,8 @@ def render_image(short_id):
         
         # 3. Return the image data
         if img_response.status_code == 200:
-            return Response(img_response.content, mimetype='image/png')
-        return "Image not found.", 404
+            content_type = img_response.headers.get('Content-Type')
+            return Response(img_response.content, mimetype=content_type)
             
     except Exception as e:
         return "Proxy Error", 500
