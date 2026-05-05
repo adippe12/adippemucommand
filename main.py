@@ -136,40 +136,55 @@ def generate_diagram():
     try:
         parts = query.split(None, 1)
         if len(parts) < 2:
-            return "Error: Provide engine and code."
+            return "Error: Provide engine and code (e.g., !diagram d2 A -> B)"
         
         engine = parts[0].lower()
         diagram_code = parts[1]
 
-        # --- NEW: AUTO-WRAPPER FOR TIKZ ---
-        if engine == 'tikz':
-            # Only wrap if the user hasn't provided a document header already
-            if r'\documentclass' not in diagram_code:
-                diagram_code = rf"""\documentclass[tikz,border=2pt]{{standalone}}
+        # TikZ Wrapper
+        if engine == 'tikz' and r'\documentclass' not in diagram_code:
+            diagram_code = rf"""\documentclass[tikz,border=2pt]{{standalone}}
 \usepackage{{pgfplots}}
 \pgfplotsset{{compat=1.18}}
 \usetikzlibrary{{math,shapes,arrows.meta,positioning,calc}}
 \begin{{document}}
 {diagram_code}
 \end{{document}}"""
-        # ----------------------------------
 
+        # Format Logic
         svg_only = ['d2', 'excalidraw', 'nomnoml', 'pikchr', 'svgbob', 'symbolator', 'wavedrom', 'dbml', 'bpmn', 'bytefield']
         fmt = 'svg' if engine in svg_only else 'png'
 
+        # Encoding
         compressed = zlib.compress(diagram_code.encode('utf-8'), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
-        
         kroki_url = f"https://kroki.io/{engine}/{fmt}/{encoded}"
         
+        # --- NEW: VALIDATION STEP ---
+        # We check if Kroki is happy BEFORE we give the URL to the user
+        check = requests.get(kroki_url, timeout=8)
+        
+        if check.status_code != 200:
+            # If Kroki fails, it sends HTML. We look for the error message inside it.
+            # We'll use a simple regex to find the error text in the <strong> tag
+            error_match = re.search(r'<strong id="error"><code>.*?<\/code>(.*?)<\/strong>', check.text)
+            if error_match:
+                clean_error = error_match.group(1).strip()
+                return f"❌ {engine.upper()} Error: {clean_error}"
+            return f"❌ {engine.upper()} Error: Syntax is incorrect or format {fmt} is unsupported."
+        # -----------------------------
+
+        # If we got here, the diagram is valid! Now shorten it.
         tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={kroki_url}", timeout=5)
         if tiny_req.status_code == 200:
             short_id = tiny_req.text.replace("https://tinyurl.com/", "")
             return f'$<img src="{request.host_url}render/{short_id}">$'
             
-        return "Error shortening URL."
+        return "Error: TinyURL shortening failed."
+
     except Exception as e:
-        return f"Diagram Error: {str(e)}"
+        print(f"Server crash prevented: {e}")
+        return f"⚠️ System Error: {str(e)}"
 
 # ==========================================
 # SECURE IMAGE PROXY
