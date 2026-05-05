@@ -70,7 +70,6 @@ def get_theorem():
 
 
 
-
 @app.route('/tikz')
 def generate_tikz():
     query = request.args.get('q')
@@ -90,22 +89,10 @@ def generate_tikz():
             return "Error: No TikZ code generated."
             
         tikz_code = match.group(0)
-        square_fix = r"""
-  % --- Automatically inserted to force a pure square bounding box ---
-  \path let 
-    \p1=(current bounding box.south west),
-    \p2=(current bounding box.north east),
-    \n1={max(\x2-\x1,\y2-\y1)/2}, 
-    \p3=(current bounding box.center) 
-  in 
-    (\x3-\n1, \y3-\n1) rectangle (\x3+\n1, \y3+\n1);
-\end{tikzpicture}"""
 
+        # ---> REMOVED THE SQUARE FIX HERE <---
 
-        # Replace the closing tag with our fix + the closing tag
-        tikz_code = tikz_code.replace(r'\end{tikzpicture}', square_fix)
-
-        # Your specific LaTeX structure
+        # Your specific LaTeX structure (preview will handle the tight cropping naturally)
         latex_template = r"""\documentclass{article}
 \usepackage{tikz}
 \usepackage{tikz-3dplot}
@@ -129,8 +116,10 @@ def generate_tikz():
         
         if tiny_req.status_code == 200:
             short_id = tiny_req.text.replace("https://tinyurl.com/", "")
-            # 3. Return the whitelisted proxy URL
-            return f'$<img src="{request.host_url}render/{short_id}">$'
+            
+            # ---> IF YOU NEED IT TO BE A SQUARE FOR TWITCH, DO IT IN HTML/CSS HERE: <---
+            return f'$<img src="{request.host_url}render/{short_id}" style="object-fit: contain; width: 100px; height: 100px;">$'
+            
         return "Error shortening URL."
 
     except Exception as e:
