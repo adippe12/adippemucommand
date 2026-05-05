@@ -75,26 +75,23 @@ def get_theorem():
 def generate_tikz():
     query = request.args.get('q')
     if not query:
-        return "Tell me what to draw! Example: !tikz a red circle with a blue square"
+        return "Tell me what to draw! Example: !tikz a red circle"
     
     prompt = (
         f"Write TikZ code to draw: {query}. "
         "Return ONLY the raw code starting with \\begin{tikzpicture} and ending with \\end{tikzpicture}. "
-        "DO NOT write \\documentclass or \\usepackage. "
-        "You have access to tikz-3dplot, math, shapes, positioning, and calc libraries. "
-        "No explanations, no markdown."
+        "No preamble, no explanations, no markdown."
     )
     
     try:
         response = model.generate_content(prompt)
-        raw_text = response.text
-        
-        match = re.search(r'\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}', raw_text, re.DOTALL)
+        match = re.search(r'\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}', response.text, re.DOTALL)
         if not match:
-            return "Error: The AI forgot how to draw (No tikzpicture found)."
+            return "Error: No TikZ code generated."
             
         tikz_code = match.group(0)
 
+        # Your specific LaTeX structure
         latex_template = r"""\documentclass{article}
 \usepackage{tikz}
 \usepackage{tikz-3dplot}
@@ -106,53 +103,43 @@ def generate_tikz():
 %s
 \end{document}
 """
-        full_latex_document = latex_template % tikz_code
-
-        # Compress for Kroki
-        compressed = zlib.compress(full_latex_document.encode('utf-8'), 9)
+        full_doc = latex_template % tikz_code
+        compressed = zlib.compress(full_doc.encode('utf-8'), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
-        long_img_url = f"https://kroki.io/tikz/png/{encoded}"
         
-        # 1. Secretly shorten the URL to bypass Twitch Character Limits
-        tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={long_img_url}", timeout=5)
+        # 1. Generate the Kroki URL
+        kroki_url = f"https://kroki.io/tikz/png/{encoded}"
+        
+        # 2. Shorten it to bypass Twitch limits
+        tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={kroki_url}", timeout=5)
         
         if tiny_req.status_code == 200:
-            short_url = tiny_req.text
-            # Extract just the ID (e.g., 'y3abcde')
-            short_id = short_url.replace("https://tinyurl.com/", "")
-            
-            # 2. Build YOUR whitelisted URL using your Vercel domain
-            # request.host_url automatically grabs 'https://adippemucommand.vercel.app/'
-            whitelisted_url = f"{request.host_url}render/{short_id}"
-            
-            return f'$<img src="{whitelisted_url}">$'
-        else:
-            return "Error: Could not process image URL."
+            short_id = tiny_req.text.replace("https://tinyurl.com/", "")
+            # 3. Return the whitelisted proxy URL
+            return f'$<img src="{request.host_url}render/{short_id}">$'
+        return "Error shortening URL."
 
     except Exception as e:
-        print(f"TikZ Error: {e}")
-        return "Error: My LaTeX compiler broke!"
-
+        return f"TikZ Error: {e}"
 
 # ==========================================
-# NEW ROUTE: The Image Proxy / Renderer
+# SECURE IMAGE PROXY
 # ==========================================
 @app.route('/render/<short_id>')
 def render_image(short_id):
     try:
-        # Reconstruct the TinyURL
-        tiny_url = f"https://tinyurl.com/{short_id}"
+        # 1. Fetch the image (Following the TinyURL redirect)
+        img_response = requests.get(f"https://tinyurl.com/{short_id}", timeout=10)
         
-        # Fetch the actual image data. 
-        # requests will automatically follow the TinyURL redirect to Kroki!
-        img_response = requests.get(tiny_url, timeout=10)
+        # 2. THE SECURITY CHECK: 
+        # Only allow the request if it actually ends up at Kroki's TikZ renderer
+        if not img_response.url.startswith("https://kroki.io/tikz/png/"):
+            return "Unauthorized: Only TikZ diagrams from Kroki are allowed.", 403
         
+        # 3. Return the image data
         if img_response.status_code == 200:
-            # Return the RAW image bytes directly to your chat extension
             return Response(img_response.content, mimetype='image/png')
-        else:
-            return "Image generation failed.", 404
+        return "Image not found.", 404
             
     except Exception as e:
-        print(f"Render Error: {e}")
-        return "Could not load image.", 500
+        return "Proxy Error", 500
