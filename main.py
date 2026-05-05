@@ -6,6 +6,8 @@ from pypdf import PdfReader
 import google.generativeai as genai
 import zlib
 import base64
+import re 
+
 
 app = Flask(__name__)
 
@@ -68,41 +70,56 @@ def get_theorem():
 
 
 
+
 @app.route('/tikz')
 def generate_tikz():
     query = request.args.get('q')
     if not query:
         return "Tell me what to draw! Example: !tikz a red circle with a blue square"
     
-    # 1. Prompt Gemini to act as a TikZ compiler
+    # 1. Ask Gemini for JUST the picture block
     prompt = (
-        f"Write TikZ code to draw the following: {query}. "
+        f"Write TikZ code to draw: {query}. "
         "Return ONLY the raw code starting with \\begin{tikzpicture} and ending with \\end{tikzpicture}. "
-        "ABSOLUTELY NO \\usepackage, NO \\documentclass, NO explanations, and NO markdown. "
-        "Just the picture block."
+        "DO NOT write \\documentclass or \\usepackage. "
+        "You have access to tikz-3dplot, math, shapes, positioning, and calc libraries. "
+        "No explanations, no markdown."
     )
     
     try:
-        # 2. Get code from Gemini
         response = model.generate_content(prompt)
-        tikz_code = response.text.strip()
+        raw_text = response.text
         
-        # Failsafe: Remove markdown blocks if Gemini stubbornly includes them
-        if tikz_code.startswith("```"):
-            lines = tikz_code.split('\n')
-            if lines[0].startswith("```"): lines = lines[1:]
-            if lines[-1].startswith("```"): lines = lines[:-1]
-            tikz_code = '\n'.join(lines).strip()
+        # 2. Extract ONLY the tikzpicture block (ignores Gemini's conversational text)
+        match = re.search(r'\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}', raw_text, re.DOTALL)
+        
+        if not match:
+            return "Error: The AI forgot how to draw (No tikzpicture found)."
+            
+        tikz_code = match.group(0)
 
-        # 3. Compress and Encode the TikZ code for Kroki.io
-        # Kroki requires URL-safe Base64 of zlib compressed text
-        compressed = zlib.compress(tikz_code.encode('utf-8'), 9)
+        # 3. Use the exact LaTeX structure the site wants!
+        latex_template = r"""\documentclass{article}
+\usepackage{tikz}
+\usepackage{tikz-3dplot}
+\usetikzlibrary{math,shapes,arrows.meta,positioning,calc}
+\usepackage[active,tightpage]{preview}
+\PreviewEnvironment{tikzpicture}
+\setlength\PreviewBorder{0.125pt}
+\begin{document}
+%s
+\end{document}
+"""
+        # Insert Gemini's drawing into your template
+        full_latex_document = latex_template % tikz_code
+
+        # 4. Compress and Encode the FULL document
+        compressed = zlib.compress(full_latex_document.encode('utf-8'), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
         
-        # 4. Create the final Kroki PNG URL
+        # 5. Create the URL
         img_url = f"https://kroki.io/tikz/png/{encoded}"
         
-        # 5. Return exactly the format your chat extension expects
         return f'$<img src="{img_url}">$'
 
     except Exception as e:
