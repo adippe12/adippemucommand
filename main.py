@@ -164,28 +164,34 @@ def generate_diagram():
         if check.status_code != 200:
             content = check.text
             error_msg = ""
-
+            
             if "<html" in content.lower():
-                # Step A: Try to find the summary error (the "strong" tag)
                 summary_match = re.search(r'<strong id="error">(?:<code>.*?</code>)?\s*(.*?)\s*</strong>', content, re.DOTALL)
-                
-                # Step B: Try to find detailed logs (often in <pre> tags for TikZ/LaTeX)
                 detail_match = re.search(r'<pre>(.*?)</pre>', content, re.DOTALL)
 
                 if summary_match:
-                    error_msg = re.sub(r'<.*?>', '', summary_match.group(1)) # Remove any inner tags
+                    error_msg = re.sub(r'<.*?>', '', summary_match.group(1))
                 
                 if detail_match and engine == 'tikz':
-                    # For TikZ, the detail is usually more helpful than the summary
-                    error_msg = detail_match.group(1).split('!', 1)[-1] # Grab the part after the LaTeX '!'
-
+                    # Grab the part after '!' which is the actual LaTeX error
+                    error_msg = detail_match.group(1).split('!', 1)[-1]
             else:
-                # If it's not HTML, Kroki sent plain text error
                 error_msg = content
 
-            # Clean up and truncate for Twitch (max 400 chars)
-            clean_msg = " ".join(error_msg.split()) # Remove newlines/extra spaces
-            return f"❌ {engine.upper()} Error: {clean_msg[:350]}..."
+            # --- NEW: NOISE FILTER ---
+            # 1. Remove "Error 400:", "SyntaxError:", etc.
+            error_msg = re.sub(r'Error \d+:|SyntaxError:|Lexical error on line \d+\.', '', error_msg)
+            
+            # 2. Strip out the internal JavaScript stack traces
+            error_msg = error_msg.split("at Worker.convert")[0]
+            error_msg = error_msg.split("at async file")[0]
+            
+            # 3. Strip out LaTeX exit codes
+            error_msg = error_msg.replace("(exit code 1)", "").strip()
+
+            # 4. Clean up whitespace and truncate
+            clean_msg = " ".join(error_msg.split())
+            return f"❌ {engine.upper()}: {clean_msg[:300]}"
 
         # 6. Success: Shorten and Return
         tiny_req = requests.get(f"https://tinyurl.com/api-create.php?url={kroki_url}", timeout=5)
