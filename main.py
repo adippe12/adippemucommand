@@ -88,54 +88,35 @@ def generate_tikz():
         match = re.search(r'\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}', response.text, re.DOTALL)
         if not match:
             return "Error: No TikZ code generated."
-                    
+            
         tikz_code = match.group(0)
+        square_fix = r"""
+  % --- Automatically inserted to force a pure square bounding box ---
+  \path let 
+    \p1=(current bounding box.south west),
+    \p2=(current bounding box.north east),
+    \n1={max(\x2-\x1,\y2-\y1)/2}, 
+    \p3=(current bounding box.center) 
+  in 
+    (\x3-\n1, \y3-\n1) rectangle (\x3+\n1, \y3+\n1);
+\end{tikzpicture}"""
 
-        # The New LaTeX Template
-        # We use %% to represent a single % in Python string formatting to avoid errors
+
+        # Replace the closing tag with our fix + the closing tag
+        tikz_code = tikz_code.replace(r'\end{tikzpicture}', square_fix)
+
+        # Your specific LaTeX structure
         latex_template = r"""\documentclass{article}
-        \usepackage{tikz}
-        \usepackage{tikz-3dplot}
-        \usetikzlibrary{math,shapes,arrows.meta,positioning,calc}
-        \usepackage[active,tightpage]{preview}
-        \setlength\PreviewBorder{0.125pt}
-
-        % Define variables to hold the measurements
-        \newsavebox{\tikzbox}
-        \newlength{\boxwidth}
-        \newlength{\boxheight}
-        \newlength{\maxdim}
-
-        \begin{document}
-        \begin{preview}
-        % 1. Save the generated TikZ image into a box so we can measure it
-        \sbox{\tikzbox}{%%
-        %s%%
-        }
-        % 2. Measure the width and total height of the image
-        \setlength{\boxwidth}{\wd\tikzbox}
-        \setlength{\boxheight}{\ht\tikzbox}
-        \addtolength{\boxheight}{\dp\tikzbox}
-
-        % 3. Find out which dimension is larger
-        \ifdim\boxwidth>\boxheight
-        \setlength{\maxdim}{\boxwidth}
-        \else
-        \setlength{\maxdim}{\boxheight}
-        \fi
-
-        % 4. Create a perfectly square container and center the image inside it
-        \makebox[\maxdim][c]{%%
-        \vbox to \maxdim{%%
-            \vfill
-            \hbox to \maxdim{\hfill\usebox{\tikzbox}\hfill}%%
-            \vfill
-        }%%
-        }
-        \end{preview}
-        \end{document}
-        """
-
+\usepackage{tikz}
+\usepackage{tikz-3dplot}
+\usetikzlibrary{math,shapes,arrows.meta,positioning,calc}
+\usepackage[active,tightpage]{preview}
+\PreviewEnvironment{tikzpicture}
+\setlength\PreviewBorder{0.125pt}
+\begin{document}
+%s
+\end{document}
+"""
         full_doc = latex_template % tikz_code
         compressed = zlib.compress(full_doc.encode('utf-8'), 9)
         encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
